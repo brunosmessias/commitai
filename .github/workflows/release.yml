@@ -1,0 +1,115 @@
+name: Release
+
+# Triggered on a version tag push (e.g. v0.1.0). Builds binaries for the
+# major platforms, packages them, and creates a GitHub Release with the
+# archives attached. Also uploads the install script and a checksum file.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: linux
+            archive: tar.gz
+          - target: x86_64-unknown-linux-musl
+            os: linux-musl
+            archive: tar.gz
+          - target: aarch64-unknown-linux-musl
+            os: linux-musl
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            os: macos-intel
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-arm
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            target -> ./
+
+      - name: Build (release)
+        run: cargo build --release --target ${{ matrix.target }} --locked
+
+      - name: Package
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME#v}"
+          BIN="commitai"
+          EXT=""
+          [ "${{ matrix.os }}" = "windows" ] && EXT=".exe"
+          ASSET="${BIN}-v${VERSION}-{{ matrix.target }}${EXT}"
+          mv "target/${{ matrix.target }}/release/${BIN}${EXT}" "${ASSET}"
+
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip "${ASSET}.zip" "${ASSET}"
+          else
+            tar -czf "${ASSET}.tar.gz" "${ASSET}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} release/ \;
+
+      - name: Generate checksums
+        working-directory: release
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            release/*

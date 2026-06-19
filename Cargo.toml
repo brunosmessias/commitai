@@ -1,0 +1,45 @@
+[package]
+name = "commitai"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bruno Messias <brunooost@gmail.com>"]
+description = "AI-generated commit messages for lazygit with any OpenAI-compatible provider"
+license = "MIT"
+repository = "https://github.com/brunosmessias/commitai"
+homepage = "https://github.com/brunosmessias/commitai"
+documentation = "https://github.com/brunosmessias/commitai#readme"
+readme = "README.md"
+keywords = ["git", "commit", "ai", "lazygit", "llm"]
+categories = ["command-line-utilities", "development-tools::version-control"]
+
+include = [
+    "src/**/*.rs",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE-MIT",
+    "install.sh",
+    ".github/**/*",
+]
+
+[[bin]]
+name = "commitai"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+dialoguer = { version = "0.11", default-features = false, features = ["password"] }
+dirs = "5"
+anyhow = "1"
+owo-colors = "4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
